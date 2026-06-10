@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth.js v5 required models ──────────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── App models ───────────────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  emailVerified DateTime?
+  name         String?
+  image        String?
+  passwordHash String?   // null for OAuth users
+
+  accounts Account[]
+  sessions Session[]
+  ownedWorkspaces    Workspace[]       @relation("WorkspaceOwner")
+  workspaceMemberships WorkspaceMember[]
+  assignedCards      Card[]
+}
+
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  ownerId     String
+  visibility  String   @default("private") // 'private' | 'public'
+  publicToken String?  @unique
+  createdAt   DateTime @default(now())
+
+  owner   User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members WorkspaceMember[]
+  columns Column[]
+}
+
+model WorkspaceMember {
+  workspaceId String
+  userId      String
+  role        String // 'owner' | 'editor' | 'viewer'
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, userId])
+}
+
+model Column {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  position    Float
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  cards     Card[]
+}
+
+model Card {
+  id          String    @id @default(cuid())
+  columnId    String
+  title       String
+  description Json?
+  isDone      Boolean   @default(false)
+  dueDate     DateTime?
+  assigneeId  String?
+  position    Float
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  column      Column      @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  assignee    User?       @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  subtasks    Subtask[]
+  attachments Attachment[]
+}
+
+model Subtask {
+  id       String  @id @default(cuid())
+  cardId   String
+  text     String
+  isDone   Boolean @default(false)
+  position Float
+
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+}
+
+model Attachment {
+  id          String   @id @default(cuid())
+  cardId      String
+  storagePath String
+  url         String
+  mimeType    String
+  size        Int
+  createdAt   DateTime @default(now())
+
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+}
