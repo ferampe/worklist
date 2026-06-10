@@ -56,6 +56,7 @@ export function BoardClient({ workspaceId }: { workspaceId: string }) {
   const [newColName, setNewColName] = useState("");
   const [activeCard, setActiveCard] = useState<CardData | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const { data: workspace, isLoading } = useQuery<WorkspaceData>({
     queryKey: ["workspace", workspaceId],
@@ -189,10 +190,18 @@ export function BoardClient({ workspaceId }: { workspaceId: string }) {
     <div className="flex flex-col h-screen bg-blue-600">
       {/* Header */}
       <header className="flex items-center gap-4 px-6 py-3 bg-blue-700/50 text-white shrink-0">
-        <Link href="/dashboard" className="text-blue-200 hover:text-white text-sm">
+        <Link href="/dashboard" className="text-blue-200 hover:text-white text-sm shrink-0">
           ← Inicio
         </Link>
-        <h1 className="font-bold text-lg">{workspace.name}</h1>
+        <h1 className="font-bold text-lg shrink-0">{workspace.name}</h1>
+        <div className="flex-1 max-w-xs ml-auto">
+          <input
+            placeholder="Buscar tarjetas…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-white/20 placeholder-blue-200 text-white text-sm px-3 py-1.5 rounded-lg outline-none focus:bg-white/30 transition-colors"
+          />
+        </div>
       </header>
 
       {/* Board */}
@@ -208,14 +217,19 @@ export function BoardClient({ workspaceId }: { workspaceId: string }) {
             strategy={horizontalListSortingStrategy}
           >
             <div className="flex gap-3 h-full items-start">
-              {workspace.columns.map((col) => (
-                <BoardColumn
-                  key={col.id}
-                  column={col}
-                  workspaceId={workspaceId}
-                  onCardClick={(cardId) => setSelectedCardId(cardId)}
-                />
-              ))}
+              {workspace.columns.map((col) => {
+                const filteredCol = search.trim()
+                  ? { ...col, cards: col.cards.filter((c) => c.title.toLowerCase().includes(search.toLowerCase())) }
+                  : col;
+                return (
+                  <BoardColumn
+                    key={col.id}
+                    column={filteredCol}
+                    workspaceId={workspaceId}
+                    onCardClick={(cardId) => setSelectedCardId(cardId)}
+                  />
+                );
+              })}
 
               {/* Add column */}
               <div className="shrink-0 w-64">
