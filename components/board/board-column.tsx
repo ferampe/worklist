@@ -220,7 +220,14 @@ export function BoardColumn({ column, workspaceId, columnWidth, onCardClick }: P
           </span>
         )}
 
-        <span className={cn("text-xs ml-2 shrink-0", headerMuted)}>{column.cards.length}</span>
+        <span className={cn(
+          "ml-2 shrink-0 min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center text-xs font-semibold leading-none",
+          hasColor
+            ? "bg-white/25 text-white"
+            : "bg-gray-300/70 text-gray-600 dark:bg-gray-600/70 dark:text-gray-300",
+        )}>
+          {column.cards.length}
+        </span>
 
         {/* Archive toggle */}
         <button
