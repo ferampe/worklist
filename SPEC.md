@@ -49,6 +49,10 @@ con `Ctrl+C` / `Ctrl+V`.
 ### 3.3 Columnas
 - RF-20: Crear, renombrar y eliminar columnas dentro de un espacio.
 - RF-21: Reordenar columnas mediante arrastrar y soltar; el orden persiste.
+- RF-22: **Color de columna** — cada columna tiene un ícono ⚙ (visible al pasar el
+  cursor) que abre un popover con 16 colores sólidos + opción "sin color". El color
+  se aplica al header de la columna con texto en blanco. La eliminación de columna
+  también se confirma inline desde ese mismo popover (sin `window.confirm()`).
 
 ### 3.4 Tarjetas / tareas
 - RF-30: Crear, editar, completar y eliminar tarjetas dentro de una columna.
@@ -56,6 +60,14 @@ con `Ctrl+C` / `Ctrl+V`.
 - RF-32: Cada tarjeta tiene: título, descripción (editor rico), estado (completada/no),
   fecha de vencimiento opcional, y asignado opcional.
 - RF-33: Subtareas (checklist) dentro de una tarjeta.
+- RF-34: **Color de tarjeta** — 10 opciones de color (punto de color + tinte de fondo).
+  Indicadores visuales en la tarjeta: icono de descripción (≡), conteo de subtareas,
+  iniciales del asignado, fecha de vencimiento (roja si vencida).
+- RF-35: **Archivar tarjeta** — las tarjetas archivadas se ocultan del tablero.
+  Cada columna tiene un toggle (▣) para ver/restaurar sus archivadas bajo demanda.
+- RF-36: **Confirmación de eliminación** — al pulsar "Eliminar tarjeta", el área de
+  peligro se transforma en una confirmación inline con mensaje de advertencia y botones
+  Cancelar / Sí, eliminar. No se usa `window.confirm()`.
 
 ### 3.5 Editor de texto enriquecido
 - RF-40: Formato básico: negrita, cursiva, subrayado, tachado, encabezados, listas,
@@ -65,9 +77,17 @@ con `Ctrl+C` / `Ctrl+V`.
 - RF-42: Arrastrar y soltar archivos de imagen sobre el editor para insertarlos.
 - RF-43: Las imágenes se almacenan de forma persistente (no como base64 en la BD).
 
-### 3.6 Colaboración en tiempo real
+### 3.6 Configuración del espacio de trabajo
+- RF-60: **Ancho de columnas** — tres tamaños (sm 256 px / md 320 px / lg 384 px),
+  persistido por workspace, aplicado instantáneamente sin recarga.
+- RF-61: **Fondo del tablero** — selector con 12 gradientes predefinidos, 16 colores
+  sólidos curados, y picker nativo para color libre. Preview en vivo en el modal.
+  El header usa overlay semitransparente compatible con cualquier fondo.
+
+### 3.7 Colaboración en tiempo real
 - RF-50: Los cambios en columnas/tarjetas de un espacio compartido se reflejan
-  en vivo para los demás miembros conectados (sincronización a nivel de entidad).
+  en vivo para los demás miembros conectados (sincronización a nivel de entidad,
+  via Socket.io sobre servidor HTTP custom).
 
 ## 4. Requisitos no funcionales
 
@@ -127,6 +147,8 @@ workspaces
   id, name, owner_id -> users.id
   visibility: 'private' | 'public'
   public_token (nullable, para enlace público de solo lectura)
+  column_width: 'sm' | 'md' | 'lg'   (ancho de columnas, default 'sm')
+  board_background: string             (CSS background: gradiente o color hex, default vacío = azul)
   created_at
 
 workspace_members
@@ -145,6 +167,8 @@ cards
   title
   description (JSON del documento TipTap)
   is_done (bool)
+  is_archived (bool, default false)
+  color: string (clave de color, default 'none')
   due_date (nullable)
   assignee_id -> users.id (nullable)
   position
@@ -193,13 +217,24 @@ operar. Para workspaces públicos basta con el `public_token` en la URL.
 - Drag & drop de columnas y tarjetas.
 - Editor TipTap con formato básico + pegado de imágenes.
 
-**Fase 2 — Colaboración**
-- Invitar miembros y roles, compartir.
-- Workspaces públicos con enlace de solo lectura.
-- Sincronización en tiempo real.
+**Fase 2 — Colaboración** ✅
+- Invitar miembros por email con roles (owner / editor / viewer).
+- Cambiar rol y eliminar miembros desde el panel de configuración (⚙).
+- Workspaces públicos con enlace de solo lectura (`/p/[token]`).
+- Sincronización en tiempo real vía Socket.io (card:created/updated/deleted, column:updated/deleted).
 
 **Fase 3 — Mejoras**
 - Subtareas, fechas de vencimiento, asignados, búsqueda, móvil pulido.
+
+**Mejoras transversales implementadas (pre-Fase 3)**
+- Colores de tarjeta (10 opciones) con punto de color + tinte de fondo.
+- Archivado de tarjetas con toggle de vista por columna.
+- Modo oscuro / claro con persistencia (`next-themes`).
+- Indicadores en tarjeta: descripción, subtareas, asignado, vencimiento.
+- Ancho de columnas configurable por workspace (sm / md / lg).
+- Fondo del tablero: 12 gradientes + 16 sólidos + color libre (picker nativo).
+- Confirmación de eliminación inline en modal de tarjeta y popover de columna (sin `window.confirm`).
+- Color de columna: 16 sólidos + opción reset, aplicado al header con texto blanco.
 
 ## 9. Infraestructura y despliegue (VPS propio)
 

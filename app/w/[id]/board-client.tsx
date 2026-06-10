@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -25,12 +25,18 @@ import { CardItem } from "@/components/board/card-item";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CardModal } from "@/components/board/card-modal";
+import { WorkspaceSettings } from "@/components/board/workspace-settings";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { DEFAULT_BG } from "@/lib/board-backgrounds";
 
 export interface CardData {
   id: string;
   columnId: string;
   title: string;
   isDone: boolean;
+  isArchived: boolean;
+  color: string;
+  description: unknown;
   position: number;
   dueDate: string | null;
   assignee: { id: string; name: string | null; image: string | null } | null;
@@ -40,13 +46,18 @@ export interface CardData {
 export interface ColumnData {
   id: string;
   name: string;
+  color: string;
   position: number;
   cards: CardData[];
 }
 
+export type ColumnWidth = "sm" | "md" | "lg";
+
 export interface WorkspaceData {
   id: string;
   name: string;
+  columnWidth: ColumnWidth;
+  boardBackground: string;
   columns: ColumnData[];
 }
 
@@ -56,12 +67,117 @@ export function BoardClient({ workspaceId }: { workspaceId: string }) {
   const [newColName, setNewColName] = useState("");
   const [activeCard, setActiveCard] = useState<CardData | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
   const [search, setSearch] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const isPanningRef = useRef(false);
+  const panOriginRef = useRef({ x: 0, scrollLeft: 0 });
 
   const { data: workspace, isLoading } = useQuery<WorkspaceData>({
     queryKey: ["workspace", workspaceId],
     queryFn: () => fetch(`/api/workspaces/${workspaceId}`).then((r) => r.json()),
   });
+
+  // Board pan-to-scroll: drag on empty board space scrolls horizontally
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      if (!isPanningRef.current || !scrollRef.current) return;
+      const dx = e.clientX - panOriginRef.current.x;
+      scrollRef.current.scrollLeft = panOriginRef.current.scrollLeft - dx;
+    }
+    function onMouseUp() {
+      if (!isPanningRef.current) return;
+      isPanningRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
+
+  function handleBoardMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    // Only left button; ignore if click originated inside a column or its children
+    if (e.button !== 0) return;
+    if ((e.target as Element).closest("[data-board-column]")) return;
+    // Also ignore clicks on interactive elements (buttons, inputs)
+    const tag = (e.target as Element).tagName;
+    if (tag === "BUTTON" || tag === "INPUT" || tag === "TEXTAREA") return;
+
+    const el = scrollRef.current!;
+    if (el.scrollWidth <= el.clientWidth) return;
+
+    isPanningRef.current = true;
+    panOriginRef.current = { x: e.clientX, scrollLeft: el.scrollLeft };
+    document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
+  }
+
+  useEffect(() => {
+    let socket: import("socket.io-client").Socket;
+    import("socket.io-client").then(({ io }) => {
+      socket = io({ path: "/api/socket" });
+      socket.emit("join-workspace", workspaceId);
+
+    socket.on("card:created", (card: CardData) => {
+      qc.setQueryData<WorkspaceData>(["workspace", workspaceId], (prev) =>
+        prev ? {
+          ...prev,
+          columns: prev.columns.map((col) =>
+            col.id === card.columnId ? { ...col, cards: [...col.cards.filter((c) => c.id !== card.id), card] } : col,
+          ),
+        } : prev,
+      );
+    });
+
+    socket.on("card:updated", (card: CardData & { isArchived?: boolean }) => {
+      qc.setQueryData<WorkspaceData>(["workspace", workspaceId], (prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          columns: prev.columns.map((col) => ({
+            ...col,
+            cards: card.isArchived
+              ? col.cards.filter((c) => c.id !== card.id)
+              : col.cards.map((c) => c.id === card.id ? { ...c, ...card } : c),
+          })),
+        };
+      });
+    });
+
+    socket.on("card:deleted", ({ id }: { id: string }) => {
+      qc.setQueryData<WorkspaceData>(["workspace", workspaceId], (prev) =>
+        prev ? {
+          ...prev,
+          columns: prev.columns.map((col) => ({ ...col, cards: col.cards.filter((c) => c.id !== id) })),
+        } : prev,
+      );
+    });
+
+    socket.on("column:updated", (column: { id: string; name: string; color: string; position: number }) => {
+      qc.setQueryData<WorkspaceData>(["workspace", workspaceId], (prev) =>
+        prev ? {
+          ...prev,
+          columns: prev.columns.map((col) => col.id === column.id ? { ...col, ...column } : col),
+        } : prev,
+      );
+    });
+
+    socket.on("column:deleted", ({ id }: { id: string }) => {
+      qc.setQueryData<WorkspaceData>(["workspace", workspaceId], (prev) =>
+        prev ? { ...prev, columns: prev.columns.filter((col) => col.id !== id) } : prev,
+      );
+    });
+
+    });
+    return () => {
+      socket?.emit("leave-workspace", workspaceId);
+      socket?.disconnect();
+    };
+  }, [workspaceId, qc]);
 
   const addColumn = useMutation({
     mutationFn: (name: string) =>
@@ -187,9 +303,9 @@ export function BoardClient({ workspaceId }: { workspaceId: string }) {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-blue-600">
+    <div className="flex flex-col h-screen" style={{ background: workspace.boardBackground || DEFAULT_BG }}>
       {/* Header */}
-      <header className="flex items-center gap-4 px-6 py-3 bg-blue-700/50 text-white shrink-0">
+      <header className="flex items-center gap-4 px-6 py-3 bg-black/20 text-white shrink-0 backdrop-blur-sm">
         <Link href="/dashboard" className="text-blue-200 hover:text-white text-sm shrink-0">
           ← Inicio
         </Link>
@@ -202,10 +318,22 @@ export function BoardClient({ workspaceId }: { workspaceId: string }) {
             className="w-full bg-white/20 placeholder-blue-200 text-white text-sm px-3 py-1.5 rounded-lg outline-none focus:bg-white/30 transition-colors"
           />
         </div>
+        <button
+          onClick={() => setShowSettings(true)}
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-blue-200 hover:text-white hover:bg-white/20 transition-colors text-base"
+          title="Configuración del espacio"
+        >
+          ⚙
+        </button>
+        <ThemeToggle className="text-white hover:bg-white/20" />
       </header>
 
       {/* Board */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden px-4 py-4">
+      <div
+        ref={scrollRef}
+        onMouseDown={handleBoardMouseDown}
+        className="flex-1 overflow-x-auto overflow-y-hidden px-4 py-4 cursor-grab active:cursor-grabbing"
+      >
         <DndContext
           sensors={sensors}
           collisionDetection={closestCorners}
@@ -226,13 +354,14 @@ export function BoardClient({ workspaceId }: { workspaceId: string }) {
                     key={col.id}
                     column={filteredCol}
                     workspaceId={workspaceId}
+                    columnWidth={workspace.columnWidth ?? "sm"}
                     onCardClick={(cardId) => setSelectedCardId(cardId)}
                   />
                 );
               })}
 
               {/* Add column */}
-              <div className="shrink-0 w-64">
+              <div className={`shrink-0 ${{ sm: "w-64", md: "w-80", lg: "w-96" }[workspace.columnWidth ?? "sm"]}`}>
                 {addingColumn ? (
                   <div className="bg-white/20 rounded-xl p-2 space-y-2">
                     <Input
@@ -282,6 +411,10 @@ export function BoardClient({ workspaceId }: { workspaceId: string }) {
           </DragOverlay>
         </DndContext>
       </div>
+
+      {showSettings && (
+        <WorkspaceSettings workspaceId={workspaceId} onClose={() => setShowSettings(false)} />
+      )}
 
       {selectedCardId && (
         <CardModal

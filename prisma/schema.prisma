@@ -65,9 +65,11 @@ model Workspace {
   id          String   @id @default(cuid())
   name        String
   ownerId     String
-  visibility  String   @default("private") // 'private' | 'public'
-  publicToken String?  @unique
-  createdAt   DateTime @default(now())
+  visibility   String   @default("private") // 'private' | 'public'
+  publicToken  String?  @unique
+  columnWidth     String   @default("sm")      // 'sm' | 'md' | 'lg'
+  boardBackground String   @default("linear-gradient(135deg, #1e40af, #2563eb)")  // CSS background value
+  createdAt    DateTime @default(now())
 
   owner   User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   members WorkspaceMember[]
@@ -89,6 +91,7 @@ model Column {
   id          String   @id @default(cuid())
   workspaceId String
   name        String
+  color       String   @default("")
   position    Float
   createdAt   DateTime @default(now())
 
@@ -104,6 +107,8 @@ model Card {
   isDone      Boolean   @default(false)
   dueDate     DateTime?
   assigneeId  String?
+  color       String    @default("none")
+  isArchived  Boolean   @default(false)
   position    Float
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -131,6 +136,7 @@ model Attachment {
   url         String
   mimeType    String
   size        Int
+  name        String   @default("")
   createdAt   DateTime @default(now())
 
   card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)

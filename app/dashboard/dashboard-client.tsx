@@ -91,7 +91,7 @@ export function DashboardClient() {
   return (
     <>
       <div className="flex items-center justify-between mb-6 gap-4">
-        <h2 className="text-xl font-semibold text-gray-900 shrink-0">Mis espacios</h2>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 shrink-0">Mis espacios</h2>
         <div className="flex items-center gap-3 flex-1 max-w-sm ml-auto">
           <Input
             placeholder="Buscar espacios…"
@@ -125,15 +125,15 @@ export function DashboardClient() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((ws) => (
-            <div key={ws.id} className="group relative bg-white border border-gray-200 rounded-xl hover:border-blue-400 hover:shadow-sm transition-all">
+            <div key={ws.id} className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-sm transition-all">
               <Link href={`/w/${ws.id}`} className="block p-5">
-                <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 truncate pr-8">
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 truncate pr-8">
                   {ws.name}
                 </h3>
-                <p className="text-sm text-gray-400 mt-1">
+                <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
                   {ws._count.columns} {ws._count.columns === 1 ? "columna" : "columnas"}
                 </p>
-                <span className="mt-3 inline-block text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full capitalize">
+                <span className="mt-3 inline-block text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full capitalize">
                   {ws.role}
                 </span>
               </Link>

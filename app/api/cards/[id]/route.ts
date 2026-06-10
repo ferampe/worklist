@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceMember } from "@/lib/access";
+import { emit } from "@/lib/emit";
 
 async function getWorkspaceId(cardId: string) {
   const card = await prisma.card.findUnique({
@@ -44,16 +45,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       title: data.title,
       description: data.description,
       isDone: data.isDone,
-      dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+      // undefined → skip field; null → clear date; string → set date
+      dueDate: data.dueDate !== undefined ? (data.dueDate ? new Date(data.dueDate) : null) : undefined,
       assigneeId: data.assigneeId,
       columnId: data.columnId,
       position: data.position,
+      color: data.color,
+      isArchived: data.isArchived,
     },
     include: {
       assignee: { select: { id: true, name: true, image: true } },
       _count: { select: { subtasks: true } },
     },
   });
+  emit(workspaceId, "card", "updated", card);
   return NextResponse.json(card);
 }
 
@@ -66,5 +71,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if ("error" in access) return access.error;
 
   await prisma.card.delete({ where: { id } });
+  emit(workspaceId, "card", "deleted", { id, workspaceId });
   return new NextResponse(null, { status: 204 });
 }

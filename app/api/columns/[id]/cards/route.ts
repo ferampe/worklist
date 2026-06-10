@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceMember } from "@/lib/access";
+import { emit } from "@/lib/emit";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: columnId } = await params;
@@ -21,5 +22,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     include: { assignee: { select: { id: true, name: true, image: true } }, _count: { select: { subtasks: true } } },
   });
 
+  emit(column.workspaceId, "card", "created", card);
   return NextResponse.json(card, { status: 201 });
 }

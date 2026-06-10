@@ -14,6 +14,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         orderBy: { position: "asc" },
         include: {
           cards: {
+            where: { isArchived: false },
             orderBy: { position: "asc" },
             include: { assignee: { select: { id: true, name: true, image: true } }, _count: { select: { subtasks: true } } },
           },
@@ -30,8 +31,26 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const access = await requireWorkspaceMember(id, "owner");
   if ("error" in access) return access.error;
 
-  const { name } = await req.json();
-  const workspace = await prisma.workspace.update({ where: { id }, data: { name } });
+  const body = await req.json();
+
+  let publicToken: string | null | undefined = undefined;
+  if (body.visibility === "public") {
+    const cur = await prisma.workspace.findUnique({ where: { id }, select: { publicToken: true } });
+    publicToken = cur?.publicToken ?? crypto.randomUUID();
+  } else if (body.visibility === "private") {
+    publicToken = null;
+  }
+
+  const workspace = await prisma.workspace.update({
+    where: { id },
+    data: {
+      name: body.name,
+      visibility: body.visibility,
+      columnWidth: body.columnWidth,
+      boardBackground: body.boardBackground,
+      ...(publicToken !== undefined ? { publicToken } : {}),
+    },
+  });
   return NextResponse.json(workspace);
 }
 

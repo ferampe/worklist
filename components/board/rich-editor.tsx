@@ -2,10 +2,15 @@
 
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
-import { useEffect, useCallback } from "react";
+import Underline from "@tiptap/extension-underline";
+import { useEffect } from "react";
+import {
+  Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code,
+  Heading1, Heading2, List, ListOrdered, Quote, Minus,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 import "./rich-editor.css";
 
 interface Props {
@@ -14,59 +19,46 @@ interface Props {
   onBlur?: () => void;
 }
 
+function ToolbarBtn({
+  onClick, active, title, children,
+}: {
+  onClick: () => void;
+  active: boolean;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onMouseDown={(e) => { e.preventDefault(); onClick(); }}
+      className={cn(
+        "w-7 h-7 flex items-center justify-center rounded transition-colors",
+        active
+          ? "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
+          : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Divider() {
+  return <div className="w-px h-5 bg-gray-200 dark:bg-gray-600 mx-0.5 self-center" />;
+}
+
 export function RichEditor({ content, onChange, onBlur }: Props) {
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Image.configure({ inline: false, allowBase64: false }),
+      Underline,
       Link.configure({ openOnClick: false }),
       Placeholder.configure({ placeholder: "Agrega una descripción…" }),
     ],
     content: (content as object) ?? "",
     onUpdate: ({ editor }) => onChange(editor.getJSON()),
     onBlur: () => onBlur?.(),
-    editorProps: {
-      handlePaste(view, event) {
-        const items = event.clipboardData?.items;
-        if (!items) return false;
-        for (const item of items) {
-          if (item.type.startsWith("image/")) {
-            event.preventDefault();
-            const file = item.getAsFile();
-            if (!file) continue;
-            uploadImage(file).then((url) => {
-              if (url) view.dispatch(view.state.tr.replaceSelectionWith(
-                view.state.schema.nodes.image.create({ src: url })
-              ));
-            });
-            return true;
-          }
-        }
-        return false;
-      },
-      handleDrop(view, event) {
-        const files = event.dataTransfer?.files;
-        if (!files?.length) return false;
-        for (const file of files) {
-          if (file.type.startsWith("image/")) {
-            event.preventDefault();
-            uploadImage(file).then((url) => {
-              if (url) {
-                const { schema } = view.state;
-                const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY });
-                if (!coordinates) return;
-                view.dispatch(view.state.tr.insert(
-                  coordinates.pos,
-                  schema.nodes.image.create({ src: url })
-                ));
-              }
-            });
-            return true;
-          }
-        }
-        return false;
-      },
-    },
   });
 
   useEffect(() => {
@@ -83,55 +75,59 @@ export function RichEditor({ content, onChange, onBlur }: Props) {
   return (
     <div className="rich-editor-wrapper">
       {/* Toolbar */}
-      <div className="flex flex-wrap gap-0.5 p-1.5 border-b border-gray-100">
-        {[
-          { label: "B", title: "Negrita", action: () => editor.chain().focus().toggleBold().run(), active: editor.isActive("bold") },
-          { label: "I", title: "Cursiva", action: () => editor.chain().focus().toggleItalic().run(), active: editor.isActive("italic") },
-          { label: "S̶", title: "Tachado", action: () => editor.chain().focus().toggleStrike().run(), active: editor.isActive("strike") },
-          { label: "{ }", title: "Código", action: () => editor.chain().focus().toggleCode().run(), active: editor.isActive("code") },
-        ].map(({ label, title, action, active }) => (
-          <button
-            key={title}
-            type="button"
-            title={title}
-            onClick={action}
-            className={`w-7 h-7 text-xs rounded font-mono transition-colors ${
-              active ? "bg-blue-100 text-blue-700" : "text-gray-500 hover:bg-gray-100"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-        <div className="w-px bg-gray-200 mx-1" />
-        {[
-          { label: "H1", action: () => editor.chain().focus().toggleHeading({ level: 1 }).run(), active: editor.isActive("heading", { level: 1 }) },
-          { label: "H2", action: () => editor.chain().focus().toggleHeading({ level: 2 }).run(), active: editor.isActive("heading", { level: 2 }) },
-          { label: "≡", action: () => editor.chain().focus().toggleBulletList().run(), active: editor.isActive("bulletList") },
-          { label: "1.", action: () => editor.chain().focus().toggleOrderedList().run(), active: editor.isActive("orderedList") },
-        ].map(({ label, action, active }) => (
-          <button
-            key={label}
-            type="button"
-            onClick={action}
-            className={`w-7 h-7 text-xs rounded font-mono transition-colors ${
-              active ? "bg-blue-100 text-blue-700" : "text-gray-500 hover:bg-gray-100"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-0.5 px-1.5 py-1 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
+
+        {/* Formato de texto */}
+        <ToolbarBtn title="Negrita (Ctrl+B)"     active={editor.isActive("bold")}      onClick={() => editor.chain().focus().toggleBold().run()}>
+          <Bold size={14} strokeWidth={2.5} />
+        </ToolbarBtn>
+        <ToolbarBtn title="Cursiva (Ctrl+I)"     active={editor.isActive("italic")}    onClick={() => editor.chain().focus().toggleItalic().run()}>
+          <Italic size={14} strokeWidth={2.5} />
+        </ToolbarBtn>
+        <ToolbarBtn title="Subrayado (Ctrl+U)"   active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()}>
+          <UnderlineIcon size={14} strokeWidth={2.5} />
+        </ToolbarBtn>
+        <ToolbarBtn title="Tachado"              active={editor.isActive("strike")}    onClick={() => editor.chain().focus().toggleStrike().run()}>
+          <Strikethrough size={14} strokeWidth={2.5} />
+        </ToolbarBtn>
+        <ToolbarBtn title="Código en línea"      active={editor.isActive("code")}      onClick={() => editor.chain().focus().toggleCode().run()}>
+          <Code size={14} strokeWidth={2.5} />
+        </ToolbarBtn>
+
+        <Divider />
+
+        {/* Títulos */}
+        <ToolbarBtn title="Título 1" active={editor.isActive("heading", { level: 1 })} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>
+          <Heading1 size={14} strokeWidth={2.5} />
+        </ToolbarBtn>
+        <ToolbarBtn title="Título 2" active={editor.isActive("heading", { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>
+          <Heading2 size={14} strokeWidth={2.5} />
+        </ToolbarBtn>
+
+        <Divider />
+
+        {/* Listas */}
+        <ToolbarBtn title="Lista con viñetas" active={editor.isActive("bulletList")}  onClick={() => editor.chain().focus().toggleBulletList().run()}>
+          <List size={14} strokeWidth={2.5} />
+        </ToolbarBtn>
+        <ToolbarBtn title="Lista numerada"    active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
+          <ListOrdered size={14} strokeWidth={2.5} />
+        </ToolbarBtn>
+
+        <Divider />
+
+        {/* Extras */}
+        <ToolbarBtn title="Cita" active={editor.isActive("blockquote")} onClick={() => editor.chain().focus().toggleBlockquote().run()}>
+          <Quote size={14} strokeWidth={2.5} />
+        </ToolbarBtn>
+        <ToolbarBtn title="Línea separadora" active={false} onClick={() => editor.chain().focus().setHorizontalRule().run()}>
+          <Minus size={14} strokeWidth={2.5} />
+        </ToolbarBtn>
       </div>
 
-      <EditorContent editor={editor} className="prose prose-sm max-w-none p-3 min-h-[140px] focus-within:outline-none" />
+      <div className="cursor-text min-h-[140px]" onClick={() => editor.commands.focus()}>
+        <EditorContent editor={editor} className="prose prose-sm max-w-none p-3 focus-within:outline-none" />
+      </div>
     </div>
   );
-}
-
-async function uploadImage(file: File): Promise<string | null> {
-  const form = new FormData();
-  form.append("file", file);
-  const res = await fetch("/api/upload", { method: "POST", body: form });
-  if (!res.ok) return null;
-  const { url } = await res.json();
-  return url;
 }

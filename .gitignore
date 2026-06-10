@@ -43,3 +43,8 @@ next-env.d.ts
 /app/generated/prisma
 .playwright-mcp/
 public/uploads/
+
+# screenshots de desarrollo
+*.png
+*.jpg
+*.jpeg

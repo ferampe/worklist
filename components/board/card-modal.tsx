@@ -11,12 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { RichEditor } from "./rich-editor";
+import { AttachmentsZone } from "./attachments-zone";
+import { CARD_COLORS, COLOR_KEYS, type CardColorKey } from "@/lib/card-colors";
 import type { WorkspaceData } from "@/app/w/[id]/board-client";
 
 interface Subtask { id: string; text: string; isDone: boolean; position: number }
 interface Member { id: string; name: string | null; email: string; image: string | null; role: string }
 interface CardDetail {
-  id: string; columnId: string; title: string; description: unknown;
+  id: string; columnId: string; title: string; description: unknown; color: string;
   isDone: boolean; dueDate: string | null; assigneeId: string | null;
   subtasks: Subtask[];
 }
@@ -32,7 +34,9 @@ export function CardModal({ cardId, workspaceId, onClose }: Props) {
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [newSubtask, setNewSubtask] = useState("");
+  const [cardColor, setCardColor] = useState<CardColorKey>("none");
   const [calOpen, setCalOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const { data: card, isLoading } = useQuery<CardDetail>({
     queryKey: ["card", cardId],
@@ -51,17 +55,18 @@ export function CardModal({ cardId, workspaceId, onClose }: Props) {
       setIsDone(card.isDone);
       setDueDate(card.dueDate ? new Date(card.dueDate) : undefined);
       setAssigneeId(card.assigneeId);
+      setCardColor((card.color as CardColorKey) ?? "none");
       setSubtasks(card.subtasks ?? []);
     }
   }, [card]);
 
-  function syncBoard(updated: Partial<CardDetail>) {
+  function syncBoard(patch: object) {
     qc.setQueryData<WorkspaceData>(["workspace", workspaceId], (prev) =>
       prev ? {
         ...prev,
         columns: prev.columns.map((col) => ({
           ...col,
-          cards: col.cards.map((c) => c.id === cardId ? { ...c, ...updated } : c),
+          cards: col.cards.map((c) => c.id === cardId ? { ...c, ...patch } : c),
         })),
       } : prev
     );
@@ -91,9 +96,6 @@ export function CardModal({ cardId, workspaceId, onClose }: Props) {
     onSuccess: (subtask) => {
       setSubtasks((prev) => [...prev, subtask]);
       setNewSubtask("");
-      qc.setQueryData<CardDetail>(["card", cardId], (prev) =>
-        prev ? { ...prev, subtasks: [...(prev.subtasks ?? []), subtask] } : prev
-      );
     },
   });
 
@@ -104,9 +106,7 @@ export function CardModal({ cardId, workspaceId, onClose }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isDone }),
       }).then((r) => r.json()),
-    onSuccess: (updated) => {
-      setSubtasks((prev) => prev.map((s) => s.id === updated.id ? updated : s));
-    },
+    onSuccess: (updated) => setSubtasks((prev) => prev.map((s) => s.id === updated.id ? updated : s)),
   });
 
   const deleteSubtask = useMutation({
@@ -114,16 +114,32 @@ export function CardModal({ cardId, workspaceId, onClose }: Props) {
     onSuccess: (_, id) => setSubtasks((prev) => prev.filter((s) => s.id !== id)),
   });
 
-  const deleteCard = useMutation({
-    mutationFn: () => fetch(`/api/cards/${cardId}`, { method: "DELETE" }),
+  const archiveCard = useMutation({
+    mutationFn: () =>
+      fetch(`/api/cards/${cardId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isArchived: true }),
+      }).then((r) => r.json()),
     onSuccess: () => {
-      syncBoard({ id: cardId } as Partial<CardDetail>);
       qc.setQueryData<WorkspaceData>(["workspace", workspaceId], (prev) =>
         prev ? {
           ...prev,
-          columns: prev.columns.map((col) => ({
-            ...col, cards: col.cards.filter((c) => c.id !== cardId),
-          })),
+          columns: prev.columns.map((col) => ({ ...col, cards: col.cards.filter((c) => c.id !== cardId) })),
+        } : prev
+      );
+      onClose();
+      toast.success("Tarjeta archivada");
+    },
+  });
+
+  const deleteCard = useMutation({
+    mutationFn: () => fetch(`/api/cards/${cardId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.setQueryData<WorkspaceData>(["workspace", workspaceId], (prev) =>
+        prev ? {
+          ...prev,
+          columns: prev.columns.map((col) => ({ ...col, cards: col.cards.filter((c) => c.id !== cardId) })),
         } : prev
       );
       onClose();
@@ -132,136 +148,200 @@ export function CardModal({ cardId, workspaceId, onClose }: Props) {
   });
 
   function save() {
-    updateCard.mutate({
-      title, description, isDone,
-      dueDate: dueDate ? dueDate.toISOString() : null,
-      assigneeId,
-    });
+    updateCard.mutate({ title, description, isDone, dueDate: dueDate ? dueDate.toISOString() : null, assigneeId, color: cardColor });
   }
 
   const doneCount = subtasks.filter((s) => s.isDone).length;
-  const isOverdue = dueDate && dueDate < new Date() && !isDone;
+  const isOverdue = dueDate && dueDate < new Date() && !isDone; // solo se usa client-side, sin SSR risk
+  const assignee = members.find((m) => m.id === assigneeId);
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col overflow-hidden p-0 gap-0">
-
+      <DialogContent
+        className="w-[90vw] sm:max-w-5xl max-h-[88vh] flex flex-col overflow-hidden p-0 gap-0 bg-white dark:bg-gray-900"
+        showCloseButton={false}
+      >
         {/* Header */}
-        <div className="flex items-start gap-3 px-6 pt-6 pb-4 border-b border-gray-100">
+        <div className="flex items-center gap-3 px-7 pt-6 pb-4 border-b border-gray-100 dark:border-gray-800">
           <input
             type="checkbox"
             checked={isDone}
             onChange={(e) => { setIsDone(e.target.checked); updateCard.mutate({ isDone: e.target.checked }); }}
-            className="mt-1.5 w-4 h-4 rounded accent-blue-600 shrink-0 cursor-pointer"
+            className="w-4 h-4 rounded accent-blue-600 shrink-0 cursor-pointer"
           />
           <input
-            className={`flex-1 text-xl font-semibold text-gray-900 outline-none bg-transparent border-b border-transparent focus:border-blue-400 pb-0.5 ${isDone ? "line-through text-gray-400" : ""}`}
+            className={`flex-1 text-xl font-semibold outline-none bg-transparent border-b border-transparent focus:border-blue-400 pb-0.5 transition-colors
+              ${isDone ? "line-through text-gray-400 dark:text-gray-600" : "text-gray-900 dark:text-gray-50"}`}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={save}
             onKeyDown={(e) => e.key === "Enter" && save()}
+            placeholder="Título de la tarjeta"
           />
+          <button
+            onClick={onClose}
+            className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-200 dark:hover:bg-gray-800 text-xl leading-none ml-2 cursor-pointer transition-colors"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
         </div>
 
         {isLoading ? (
-          <div className="flex-1 flex items-center justify-center text-gray-400 py-12">Cargando…</div>
+          <div className="flex-1 flex items-center justify-center text-gray-400 py-16">Cargando…</div>
         ) : (
           <div className="flex flex-1 min-h-0 overflow-hidden">
-            {/* Left: description */}
-            <div className="flex-1 overflow-y-auto px-6 py-4 min-w-0">
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Descripción</p>
-              <RichEditor content={description} onChange={setDescription} onBlur={save} />
+
+            {/* ── Left: main content ── */}
+            <div className="flex-1 overflow-y-auto px-7 py-5 min-w-0 space-y-5">
+
+              {/* Description */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">Descripción</p>
+                <div className="rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
+                  <RichEditor content={description} onChange={setDescription} onBlur={save} />
+                </div>
+              </div>
+
+              {/* Attachments */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">Adjuntos</p>
+                <AttachmentsZone cardId={cardId} />
+              </div>
 
               {/* Subtasks */}
-              <div className="mt-5">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-                    Subtareas {subtasks.length > 0 && <span className="text-gray-500 normal-case font-normal ml-1">{doneCount}/{subtasks.length}</span>}
-                  </p>
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Subtareas</p>
+                  {subtasks.length > 0 && (
+                    <span className="text-xs text-gray-500 dark:text-gray-400 font-semibold">{doneCount}/{subtasks.length}</span>
+                  )}
                 </div>
 
-                {subtasks.length > 0 && (
-                  <div className="mb-2 space-y-1">
-                    {/* Progress bar */}
-                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-3">
-                      <div
-                        className="h-full bg-green-500 rounded-full transition-all"
-                        style={{ width: subtasks.length ? `${(doneCount / subtasks.length) * 100}%` : "0%" }}
-                      />
-                    </div>
-                    {subtasks.map((st) => (
-                      <div key={st.id} className="flex items-center gap-2 group/st py-0.5">
-                        <input
-                          type="checkbox"
-                          checked={st.isDone}
-                          onChange={(e) => toggleSubtask.mutate({ id: st.id, isDone: e.target.checked })}
-                          className="w-3.5 h-3.5 rounded accent-blue-600 cursor-pointer shrink-0"
+                <div className="rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
+                  {subtasks.length > 0 && (
+                    <div className="px-3 pt-3 pb-2">
+                      <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-3">
+                        <div
+                          className="h-full bg-green-500 rounded-full transition-all duration-300"
+                          style={{ width: `${(doneCount / subtasks.length) * 100}%` }}
                         />
-                        <span className={`flex-1 text-sm ${st.isDone ? "line-through text-gray-400" : "text-gray-700"}`}>
-                          {st.text}
-                        </span>
-                        <button
-                          onClick={() => deleteSubtask.mutate(st.id)}
-                          className="opacity-0 group-hover/st:opacity-100 text-gray-300 hover:text-red-400 text-xs transition-opacity"
-                        >
-                          ✕
-                        </button>
                       </div>
-                    ))}
+                      <div className="space-y-0.5">
+                        {subtasks.map((st) => (
+                          <div key={st.id} className="flex items-center gap-3 group/st py-1.5 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <input
+                              type="checkbox"
+                              checked={st.isDone}
+                              onChange={(e) => toggleSubtask.mutate({ id: st.id, isDone: e.target.checked })}
+                              className="w-4 h-4 rounded accent-blue-600 cursor-pointer shrink-0"
+                            />
+                            <span className={`flex-1 text-sm ${st.isDone ? "line-through text-gray-400 dark:text-gray-600" : "text-gray-700 dark:text-gray-200"}`}>
+                              {st.text}
+                            </span>
+                            <button
+                              onClick={() => deleteSubtask.mutate(st.id)}
+                              className="opacity-0 group-hover/st:opacity-100 w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 text-sm transition-all cursor-pointer"
+                              aria-label="Eliminar subtarea"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className={`flex gap-2 p-3 ${subtasks.length > 0 ? "border-t border-gray-200 dark:border-gray-700" : ""}`}>
+                    <Input
+                      placeholder="Nueva subtarea… (Enter para agregar)"
+                      value={newSubtask}
+                      onChange={(e) => setNewSubtask(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && newSubtask.trim() && addSubtask.mutate(newSubtask)}
+                      className="h-8 text-sm border-gray-300 dark:border-gray-600"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 px-3 shrink-0 border-gray-300 dark:border-gray-600 cursor-pointer"
+                      onClick={() => newSubtask.trim() && addSubtask.mutate(newSubtask)}
+                      disabled={!newSubtask.trim() || addSubtask.isPending}
+                    >
+                      +
+                    </Button>
                   </div>
-                )}
-
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Nueva subtarea…"
-                    value={newSubtask}
-                    onChange={(e) => setNewSubtask(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && newSubtask.trim() && addSubtask.mutate(newSubtask)}
-                    className="h-8 text-sm"
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 shrink-0"
-                    onClick={() => newSubtask.trim() && addSubtask.mutate(newSubtask)}
-                    disabled={!newSubtask.trim()}
-                  >
-                    +
-                  </Button>
                 </div>
               </div>
             </div>
 
-            {/* Right: metadata */}
-            <div className="w-52 shrink-0 border-l border-gray-100 px-4 py-4 space-y-4 overflow-y-auto">
+            {/* ── Right: metadata sidebar ── */}
+            <div className="w-64 shrink-0 border-l border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-5 overflow-y-auto space-y-4">
+
+              {/* Color picker */}
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 shadow-sm">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2.5">Color</p>
+                <div className="grid grid-cols-6 gap-1.5">
+                  {COLOR_KEYS.map((key) => {
+                    const c = CARD_COLORS[key];
+                    const isSelected = cardColor === key;
+                    return (
+                      <button
+                        key={key}
+                        title={c.label}
+                        onClick={() => {
+                          setCardColor(key);
+                          updateCard.mutate({ color: key });
+                        }}
+                        className={`w-7 h-7 rounded-full transition-all flex items-center justify-center cursor-pointer ${c.dot} ${
+                          isSelected
+                            ? "ring-2 ring-offset-2 ring-gray-500 dark:ring-gray-300 dark:ring-offset-gray-900 scale-110"
+                            : "hover:scale-110 opacity-70 hover:opacity-100"
+                        }`}
+                      >
+                        {isSelected && (
+                          <span className="text-white text-xs font-bold drop-shadow">✓</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
               {/* Due date */}
-              <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">Vencimiento</p>
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 shadow-sm">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2.5">Vencimiento</p>
                 <Popover open={calOpen} onOpenChange={setCalOpen}>
                   <PopoverTrigger
-                    className={`w-full text-left text-sm px-2.5 py-1.5 rounded-md border transition-colors ${
+                    className={`w-full text-left text-sm px-3 py-2 rounded-lg border-2 transition-colors font-medium cursor-pointer ${
                       dueDate
                         ? isOverdue
-                          ? "border-red-200 bg-red-50 text-red-600"
-                          : "border-gray-200 bg-gray-50 text-gray-700"
-                        : "border-dashed border-gray-200 text-gray-400 hover:border-gray-300"
+                          ? "border-red-300 bg-red-50 text-red-600 dark:border-red-700 dark:bg-red-950/50 dark:text-red-400"
+                          : "border-gray-300 bg-gray-50 text-gray-700 hover:border-blue-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                        : "border-dashed border-gray-300 bg-gray-50 text-gray-500 hover:border-blue-400 hover:text-gray-600 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400"
                     }`}
                   >
-                    {dueDate ? format(dueDate, "d MMM yyyy", { locale: es }) : "Sin fecha"}
+                    {dueDate
+                      ? `${isOverdue ? "⚠ " : "📅 "}${format(dueDate, "d 'de' MMMM yyyy", { locale: es })}`
+                      : "📅 Añadir fecha"}
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
                       mode="single"
                       selected={dueDate}
-                      onSelect={(d) => { setDueDate(d); setCalOpen(false); }}
-                      initialFocus
+                      onSelect={(d) => {
+                        setDueDate(d);
+                        setCalOpen(false);
+                        updateCard.mutate({ dueDate: d ? d.toISOString() : null });
+                      }}
                     />
                     {dueDate && (
-                      <div className="px-3 pb-3">
+                      <div className="px-3 pb-3 pt-1 border-t border-gray-100 dark:border-gray-800">
                         <button
-                          className="text-xs text-gray-400 hover:text-red-500"
-                          onClick={() => { setDueDate(undefined); setCalOpen(false); }}
+                          className="text-xs text-red-400 hover:text-red-600 transition-colors cursor-pointer"
+                          onClick={() => {
+                            setDueDate(undefined);
+                            setCalOpen(false);
+                            updateCard.mutate({ dueDate: null });
+                          }}
                         >
                           Quitar fecha
                         </button>
@@ -272,45 +352,108 @@ export function CardModal({ cardId, workspaceId, onClose }: Props) {
               </div>
 
               {/* Assignee */}
-              <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">Asignado</p>
-                <div className="space-y-1">
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 shadow-sm">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2.5">Asignado</p>
+                {assignee && (
+                  <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-blue-50 border border-blue-200 mb-2 dark:bg-blue-950/40 dark:border-blue-700">
+                    <span className="w-7 h-7 rounded-full bg-blue-500 text-white text-xs flex items-center justify-center font-semibold shrink-0">
+                      {(assignee.name ?? assignee.email)[0].toUpperCase()}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-blue-800 dark:text-blue-200 truncate">{assignee.name ?? assignee.email}</p>
+                      <p className="text-xs text-blue-500 dark:text-blue-400 truncate capitalize">{assignee.role}</p>
+                    </div>
+                    <button
+                      onClick={() => { setAssigneeId(null); updateCard.mutate({ assigneeId: null }); }}
+                      className="w-6 h-6 flex items-center justify-center rounded text-blue-300 hover:text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-sm cursor-pointer transition-colors shrink-0"
+                      aria-label="Quitar asignado"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+                <div className="space-y-0.5">
                   {members.map((m) => (
                     <button
                       key={m.id}
-                      onClick={() => { setAssigneeId(assigneeId === m.id ? null : m.id); }}
-                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors ${
+                      onClick={() => {
+                        const next = assigneeId === m.id ? null : m.id;
+                        setAssigneeId(next);
+                        updateCard.mutate({ assigneeId: next });
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-sm transition-colors cursor-pointer ${
                         assigneeId === m.id
-                          ? "bg-blue-50 text-blue-700 border border-blue-200"
-                          : "hover:bg-gray-50 text-gray-700"
+                          ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 ring-1 ring-blue-200 dark:ring-blue-700"
+                          : "hover:bg-gray-100 dark:hover:bg-gray-700/60 text-gray-600 dark:text-gray-300"
                       }`}
                     >
-                      <span className="w-6 h-6 rounded-full bg-blue-500 text-white text-xs flex items-center justify-center shrink-0 font-medium">
+                      <span className={`w-6 h-6 rounded-full text-white text-xs flex items-center justify-center font-medium shrink-0 ${
+                        assigneeId === m.id ? "bg-blue-500" : "bg-gray-400 dark:bg-gray-500"
+                      }`}>
                         {(m.name ?? m.email)[0].toUpperCase()}
                       </span>
-                      <span className="truncate text-xs">{m.name ?? m.email}</span>
+                      <span className="truncate text-sm">{m.name ?? m.email}</span>
+                      {assigneeId === m.id && <span className="ml-auto text-blue-500 text-xs">✓</span>}
                     </button>
                   ))}
+                  {members.length === 0 && (
+                    <p className="text-xs text-gray-400 dark:text-gray-600 py-1">Sin miembros</p>
+                  )}
                 </div>
               </div>
 
-              {/* Delete */}
-              <div className="pt-2 border-t border-gray-100">
-                <button
-                  onClick={() => { if (confirm("¿Eliminar esta tarjeta?")) deleteCard.mutate(); }}
-                  className="text-xs text-red-400 hover:text-red-600 transition-colors"
-                >
-                  Eliminar tarjeta
-                </button>
+              {/* Danger zone */}
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 shadow-sm space-y-2">
+                {!confirmDelete ? (
+                  <>
+                    <button
+                      onClick={() => archiveCard.mutate()}
+                      disabled={archiveCard.isPending}
+                      className="w-full text-left text-xs text-amber-600 hover:text-amber-700 dark:text-amber-500 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20 px-2 py-1.5 rounded-lg transition-colors cursor-pointer"
+                    >
+                      📦 Archivar tarjeta
+                    </button>
+                    <button
+                      onClick={() => setConfirmDelete(true)}
+                      className="w-full text-left text-xs text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-1.5 rounded-lg transition-colors cursor-pointer"
+                    >
+                      🗑 Eliminar tarjeta
+                    </button>
+                  </>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-red-600 dark:text-red-400 font-medium leading-snug">
+                      ¿Eliminar esta tarjeta? Esta acción no se puede deshacer.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setConfirmDelete(false)}
+                        className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={() => deleteCard.mutate()}
+                        disabled={deleteCard.isPending}
+                        className="flex-1 text-xs px-2 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium transition-colors cursor-pointer disabled:opacity-60"
+                      >
+                        {deleteCard.isPending ? "Eliminando…" : "Sí, eliminar"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         )}
 
         {/* Footer */}
-        <div className="flex justify-end px-6 py-3 border-t border-gray-100">
+        <div className="flex items-center justify-between px-7 py-3 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
+          <p className="text-xs text-gray-400 dark:text-gray-600">
+            {updateCard.isPending ? "Guardando…" : "Los cambios se guardan al hacer blur"}
+          </p>
           <Button size="sm" onClick={save} disabled={updateCard.isPending}>
-            {updateCard.isPending ? "Guardando…" : "Guardar"}
+            Guardar
           </Button>
         </div>
       </DialogContent>
