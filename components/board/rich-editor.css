@@ -8,6 +8,38 @@
   outline: none;
 }
 
+/* Reduce Tailwind prose default spacing — too airy for a compact card editor */
+.rich-editor-wrapper .tiptap p {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+  line-height: 1.5;
+}
+
+.rich-editor-wrapper .tiptap h1,
+.rich-editor-wrapper .tiptap h2,
+.rich-editor-wrapper .tiptap h3 {
+  margin-top: 0.75rem;
+  margin-bottom: 0.25rem;
+  line-height: 1.3;
+}
+
+.rich-editor-wrapper .tiptap ul,
+.rich-editor-wrapper .tiptap ol {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+  padding-left: 1.4rem;
+}
+
+.rich-editor-wrapper .tiptap li {
+  margin-top: 0.1rem;
+  margin-bottom: 0.1rem;
+}
+
+.rich-editor-wrapper .tiptap li p {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
 .rich-editor-wrapper .tiptap p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   color: #9ca3af;
