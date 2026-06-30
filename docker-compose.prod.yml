@@ -1,7 +1,0 @@
-services:
-  app:
-    build: .
-    image: worklist-app
-    restart: unless-stopped
-    network_mode: host
-    env_file: .env
