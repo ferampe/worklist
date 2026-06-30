@@ -1,0 +1,8 @@
+.env
+.env.local
+.env.*
+node_modules
+.next
+.git
+docker-compose.yml
+uploads
