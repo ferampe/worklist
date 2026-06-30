@@ -1,15 +1,16 @@
 services:
-  postgres:
-    image: postgres:16-alpine
+  mysql:
+    image: mysql:8.0
     restart: unless-stopped
     environment:
-      POSTGRES_USER: worklist
-      POSTGRES_PASSWORD: worklist_dev
-      POSTGRES_DB: worklist
+      MYSQL_USER: worklist
+      MYSQL_PASSWORD: worklist_dev
+      MYSQL_DATABASE: worklist
+      MYSQL_ROOT_PASSWORD: root_dev
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
 
 volumes:
-  postgres_data:
+  mysql_data:
