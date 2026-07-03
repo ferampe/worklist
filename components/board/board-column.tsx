@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { CARD_COLORS, type CardColorKey } from "@/lib/card-colors";
-import { SOLID_PRESETS } from "@/lib/board-backgrounds";
+import { COLUMN_COLOR_FAMILIES } from "@/lib/board-backgrounds";
 import type { CardData, ColumnData, ColumnWidth, WorkspaceData } from "@/app/w/[id]/board-client";
 
 const COL_WIDTH: Record<ColumnWidth, string> = {
@@ -18,6 +18,15 @@ const COL_WIDTH: Record<ColumnWidth, string> = {
   md: "w-80",
   lg: "w-96",
 };
+
+function isLightColor(hex: string): boolean {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  // Perceived luminance (ITU-R BT.601)
+  const luminance = (r * 299 + g * 587 + b * 114) / 1000;
+  return luminance > 150;
+}
 
 interface Props {
   column: ColumnData;
@@ -122,12 +131,19 @@ export function BoardColumn({ column, workspaceId, columnWidth, onCardClick }: P
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
 
   const hasColor = colColor !== "";
-  // Text/icon color: white when header has a background color, gray otherwise
-  const headerText = hasColor ? "text-white/90" : "text-gray-700 dark:text-gray-200";
-  const headerMuted = hasColor ? "text-white/60" : "text-gray-400 dark:text-gray-500";
-  const headerBtn = hasColor
-    ? "text-white/60 hover:text-white hover:bg-white/20"
-    : "text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400";
+  // Light shades (levels 2-3 of each color family) need dark text instead of white
+  const isLightBg = hasColor && isLightColor(colColor);
+  const headerText = !hasColor
+    ? "text-gray-700 dark:text-gray-200"
+    : isLightBg ? "text-gray-800/90" : "text-white/90";
+  const headerMuted = !hasColor
+    ? "text-gray-400 dark:text-gray-500"
+    : isLightBg ? "text-gray-800/60" : "text-white/60";
+  const headerBtn = !hasColor
+    ? "text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400"
+    : isLightBg
+      ? "text-gray-800/60 hover:text-gray-900 hover:bg-black/10"
+      : "text-white/60 hover:text-white hover:bg-white/20";
 
   const renameColumn = useMutation({
     mutationFn: (name: string) =>
@@ -223,7 +239,7 @@ export function BoardColumn({ column, workspaceId, columnWidth, onCardClick }: P
         <span className={cn(
           "ml-2 shrink-0 min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center text-xs font-semibold leading-none",
           hasColor
-            ? "bg-white/25 text-white"
+            ? isLightBg ? "bg-black/10 text-gray-800" : "bg-white/25 text-white"
             : "bg-gray-300/70 text-gray-600 dark:bg-gray-600/70 dark:text-gray-300",
         )}>
           {column.cards.length}
@@ -236,7 +252,7 @@ export function BoardColumn({ column, workspaceId, columnWidth, onCardClick }: P
             "ml-1 text-xs leading-none px-1.5 py-0.5 rounded transition-colors shrink-0",
             showArchived
               ? hasColor
-                ? "bg-white/20 text-white"
+                ? isLightBg ? "bg-black/10 text-gray-900" : "bg-white/20 text-white"
                 : "bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400"
               : headerBtn,
           )}
@@ -258,39 +274,47 @@ export function BoardColumn({ column, workspaceId, columnWidth, onCardClick }: P
           >
             ⚙
           </PopoverTrigger>
-          <PopoverContent side="bottom" align="end" className="w-56 p-3 space-y-3">
+          <PopoverContent side="bottom" align="end" className="w-64 p-3 space-y-3">
             {/* Color section */}
             <div>
               <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">
                 Color de columna
               </p>
-              <div className="grid grid-cols-5 gap-1.5">
-                {/* None / reset */}
-                <button
-                  onClick={() => { setColColor(""); updateColumnColor.mutate(""); }}
-                  title="Sin color"
-                  className={cn(
-                    "h-7 rounded-md border-2 text-xs font-bold transition-all cursor-pointer",
-                    !colColor
-                      ? "border-blue-500 bg-gray-100 dark:bg-gray-800 text-gray-400"
-                      : "border-gray-200 dark:border-gray-700 text-gray-300 hover:border-gray-400",
-                  )}
-                >
-                  ✕
-                </button>
-                {SOLID_PRESETS.map(({ label, value }) => (
-                  <button
-                    key={value}
-                    title={label}
-                    onClick={() => { setColColor(value); updateColumnColor.mutate(value); }}
-                    style={{ backgroundColor: value }}
-                    className={cn(
-                      "h-7 rounded-md border-2 transition-all cursor-pointer",
-                      colColor === value
-                        ? "border-blue-400 scale-110 shadow-md"
-                        : "border-transparent hover:scale-105 hover:shadow-sm",
-                    )}
-                  />
+              <button
+                onClick={() => { setColColor(""); updateColumnColor.mutate(""); }}
+                title="Sin color"
+                className={cn(
+                  "w-full h-6 mb-2 rounded-md border-2 text-xs font-bold transition-all cursor-pointer",
+                  !colColor
+                    ? "border-blue-500 bg-gray-100 dark:bg-gray-800 text-gray-400"
+                    : "border-gray-200 dark:border-gray-700 text-gray-300 hover:border-gray-400",
+                )}
+              >
+                Sin color
+              </button>
+              <div className="max-h-56 overflow-y-auto space-y-1 pr-0.5">
+                {COLUMN_COLOR_FAMILIES.map(({ label, shades }) => (
+                  <div key={label} className="flex items-center gap-1.5">
+                    <span className="w-14 shrink-0 text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                      {label}
+                    </span>
+                    <div className="flex gap-1">
+                      {shades.map((value) => (
+                        <button
+                          key={value}
+                          title={label}
+                          onClick={() => { setColColor(value); updateColumnColor.mutate(value); }}
+                          style={{ backgroundColor: value }}
+                          className={cn(
+                            "h-6 w-6 rounded-md border-2 transition-all cursor-pointer",
+                            colColor === value
+                              ? "border-blue-400 scale-110 shadow-md"
+                              : "border-transparent hover:scale-105 hover:shadow-sm",
+                          )}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>

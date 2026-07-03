@@ -38,3 +38,30 @@ export const SOLID_PRESETS: BgPreset[] = [
   { label: "Negro",      value: "#111827" },
   { label: "Marino",     value: "#1e3a5f" },
 ];
+
+export interface ColumnColorFamily {
+  label: string;
+  /** [oscuro, claro, muy claro] */
+  shades: [string, string, string];
+}
+
+// Cada familia mantiene el tono original (oscuro) como primer valor, para no romper
+// columnas que ya tengan ese color guardado.
+export const COLUMN_COLOR_FAMILIES: ColumnColorFamily[] = [
+  { label: "Pizarra",   shades: ["#334155", "#64748b", "#cbd5e1"] },
+  { label: "Gris",      shades: ["#4b5563", "#9ca3af", "#e5e7eb"] },
+  { label: "Rojo",      shades: ["#b91c1c", "#f87171", "#fecaca"] },
+  { label: "Naranja",   shades: ["#c2410c", "#fb923c", "#fed7aa"] },
+  { label: "Ámbar",     shades: ["#b45309", "#fbbf24", "#fde68a"] },
+  { label: "Lima",      shades: ["#3f6212", "#a3e635", "#d9f99d"] },
+  { label: "Verde",     shades: ["#15803d", "#4ade80", "#bbf7d0"] },
+  { label: "Esmeralda", shades: ["#0f766e", "#2dd4bf", "#99f6e4"] },
+  { label: "Cielo",     shades: ["#0369a1", "#38bdf8", "#bae6fd"] },
+  { label: "Azul",      shades: ["#1d4ed8", "#60a5fa", "#bfdbfe"] },
+  { label: "Índigo",    shades: ["#4338ca", "#818cf8", "#c7d2fe"] },
+  { label: "Violeta",   shades: ["#6d28d9", "#a78bfa", "#ddd6fe"] },
+  { label: "Púrpura",   shades: ["#7e22ce", "#c084fc", "#e9d5ff"] },
+  { label: "Rosa",      shades: ["#be185d", "#f472b6", "#fbcfe8"] },
+  { label: "Negro",     shades: ["#111827", "#374151", "#6b7280"] },
+  { label: "Marino",    shades: ["#1e3a5f", "#6d8097", "#b0bac7"] },
+];
