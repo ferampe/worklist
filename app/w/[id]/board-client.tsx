@@ -21,6 +21,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { BoardColumn } from "@/components/board/board-column";
+import { BoardTable } from "@/components/board/board-table";
 import { CardItem } from "@/components/board/card-item";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +41,7 @@ export interface CardData {
   position: number;
   dueDate: string | null;
   assignee: { id: string; name: string | null; image: string | null } | null;
+  creator: { id: string; name: string | null; image: string | null } | null;
   _count: { subtasks: number };
 }
 
@@ -69,6 +71,19 @@ export function BoardClient({ workspaceId }: { workspaceId: string }) {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"board" | "table">("board");
+
+  // Restore the saved view preference for this workspace
+  useEffect(() => {
+    const saved = localStorage.getItem(`viewMode:${workspaceId}`);
+    if (saved === "board" || saved === "table") setViewMode(saved);
+  }, [workspaceId]);
+
+  function changeView(mode: "board" | "table") {
+    setViewMode(mode);
+    localStorage.setItem(`viewMode:${workspaceId}`, mode);
+  }
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const isPanningRef = useRef(false);
   const panOriginRef = useRef({ x: 0, scrollLeft: 0 });
@@ -318,6 +333,27 @@ export function BoardClient({ workspaceId }: { workspaceId: string }) {
             className="w-full bg-white/20 placeholder-blue-200 text-white text-sm px-3 py-1.5 rounded-lg outline-none focus:bg-white/30 transition-colors"
           />
         </div>
+        {/* Selector de vista: Tablero / Tabla */}
+        <div className="flex items-center gap-0.5 bg-white/10 rounded-lg p-0.5 shrink-0">
+          <button
+            onClick={() => changeView("board")}
+            className={`px-2.5 py-1 rounded-md text-sm transition-colors ${
+              viewMode === "board" ? "bg-white/25 text-white" : "text-blue-200 hover:text-white hover:bg-white/10"
+            }`}
+            title="Vista de tablero"
+          >
+            ▦ Tablero
+          </button>
+          <button
+            onClick={() => changeView("table")}
+            className={`px-2.5 py-1 rounded-md text-sm transition-colors ${
+              viewMode === "table" ? "bg-white/25 text-white" : "text-blue-200 hover:text-white hover:bg-white/10"
+            }`}
+            title="Vista de tabla"
+          >
+            ☰ Tabla
+          </button>
+        </div>
         <button
           onClick={() => setShowSettings(true)}
           className="w-8 h-8 flex items-center justify-center rounded-lg text-blue-200 hover:text-white hover:bg-white/20 transition-colors text-base"
@@ -328,7 +364,17 @@ export function BoardClient({ workspaceId }: { workspaceId: string }) {
         <ThemeToggle className="text-white hover:bg-white/20" />
       </header>
 
-      {/* Board */}
+      {/* Table view */}
+      {viewMode === "table" ? (
+        <div className="flex-1 min-h-0">
+          <BoardTable
+            columns={workspace.columns}
+            search={search}
+            onCardClick={(cardId) => setSelectedCardId(cardId)}
+          />
+        </div>
+      ) : (
+      /* Board view */
       <div
         ref={scrollRef}
         onMouseDown={handleBoardMouseDown}
@@ -411,6 +457,7 @@ export function BoardClient({ workspaceId }: { workspaceId: string }) {
           </DragOverlay>
         </DndContext>
       </div>
+      )}
 
       {showSettings && (
         <WorkspaceSettings workspaceId={workspaceId} onClose={() => setShowSettings(false)} />

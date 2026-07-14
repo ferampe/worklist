@@ -55,6 +55,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     },
     include: {
       assignee: { select: { id: true, name: true, image: true } },
+      creator: { select: { id: true, name: true, image: true } },
       _count: { select: { subtasks: true } },
     },
   });

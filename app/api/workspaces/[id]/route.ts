@@ -16,7 +16,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
           cards: {
             where: { isArchived: false },
             orderBy: { position: "asc" },
-            include: { assignee: { select: { id: true, name: true, image: true } }, _count: { select: { subtasks: true } } },
+            include: {
+              assignee: { select: { id: true, name: true, image: true } },
+              creator: { select: { id: true, name: true, image: true } },
+              _count: { select: { subtasks: true } },
+            },
           },
         },
       },

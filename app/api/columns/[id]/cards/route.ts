@@ -18,8 +18,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const position = (last?.position ?? 0) + 1000;
 
   const card = await prisma.card.create({
-    data: { columnId, title: title.trim(), position },
-    include: { assignee: { select: { id: true, name: true, image: true } }, _count: { select: { subtasks: true } } },
+    data: { columnId, title: title.trim(), position, creatorId: access.userId },
+    include: {
+      assignee: { select: { id: true, name: true, image: true } },
+      creator: { select: { id: true, name: true, image: true } },
+      _count: { select: { subtasks: true } },
+    },
   });
 
   emit(column.workspaceId, "card", "created", card);

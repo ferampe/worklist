@@ -58,7 +58,8 @@ model User {
   sessions Session[]
   ownedWorkspaces    Workspace[]       @relation("WorkspaceOwner")
   workspaceMemberships WorkspaceMember[]
-  assignedCards      Card[]
+  assignedCards      Card[]            @relation("CardAssignee")
+  createdCards       Card[]            @relation("CardCreator")
 }
 
 model Workspace {
@@ -107,6 +108,7 @@ model Card {
   isDone      Boolean   @default(false)
   dueDate     DateTime?
   assigneeId  String?
+  creatorId   String?
   color       String    @default("none")
   isArchived  Boolean   @default(false)
   position    Float
@@ -114,7 +116,8 @@ model Card {
   updatedAt   DateTime  @updatedAt
 
   column      Column      @relation(fields: [columnId], references: [id], onDelete: Cascade)
-  assignee    User?       @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  assignee    User?       @relation("CardAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  creator     User?       @relation("CardCreator", fields: [creatorId], references: [id], onDelete: SetNull)
   subtasks    Subtask[]
   attachments Attachment[]
 }
