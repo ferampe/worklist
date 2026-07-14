@@ -121,7 +121,7 @@ ecosistema React/JS/TS.
 | Estado de servidor | **TanStack Query** (React) | Caché y sincronización de datos |
 | **Backend** | **Next.js API Routes** (TypeScript) | El backend vive dentro del mismo proyecto; cada endpoint es código nuestro |
 | ORM | **Prisma** | Tipado automático, migraciones, queries con autocompletado |
-| Base de datos | **PostgreSQL** | Relacional, robusto, gratuito (Railway/Neon/Render para hosting) |
+| Base de datos | **MySQL** | Relacional, nativo del VPS propio (sin adapter Prisma 7 disponible para MySQL, se usa Prisma 5) |
 | Auth | **Auth.js v5** (NextAuth) | Email + Google OAuth, integrado nativamente con Next.js |
 | Contraseñas | **bcrypt** | Hash seguro de contraseñas |
 | Almacenamiento de imágenes | **Cloudflare R2** o **AWS S3** | Almacenamiento de objetos; R2 no cobra por egress |
@@ -134,7 +134,7 @@ ecosistema React/JS/TS.
 
 > **Arquitectura del backend:** un solo proyecto Next.js. Las API Routes en `app/api/`
 > son el backend — cada endpoint lo escribimos nosotros en TypeScript, con Prisma para
-> acceder a Postgres y Auth.js para gestionar sesiones. No hay servicios externos
+> acceder a MySQL y Auth.js para gestionar sesiones. No hay servicios externos
 > gestionando la lógica; el control es total.
 
 ## 6. Modelo de datos (borrador)
@@ -210,7 +210,7 @@ operar. Para workspaces públicos basta con el `public_token` en la URL.
 ## 8. Roadmap por fases
 
 **Fase 0 — Base**
-- Proyecto Next.js + Prisma + Postgres local, autenticación email + Google (Auth.js).
+- Proyecto Next.js + Prisma + MySQL local, autenticación email + Google (Auth.js).
 
 **Fase 1 — MVP**
 - Crear workspaces privados, columnas y tarjetas.
@@ -236,23 +236,28 @@ operar. Para workspaces públicos basta con el `public_token` en la URL.
 - Confirmación de eliminación inline en modal de tarjeta y popover de columna (sin `window.confirm`).
 - Color de columna: 16 sólidos + opción reset, aplicado al header con texto blanco.
 
-## 9. Infraestructura y despliegue (VPS propio)
+## 9. Infraestructura y despliegue (VPS propio, CloudPanel)
 
 ```
-VPS Linux (Ubuntu)
-├── Nginx                  ← reverse proxy + SSL (Let's Encrypt)
-│   └── proxy_pass → localhost:3000
-├── Next.js (next start)   ← app + API Routes + Socket.io
-│   └── puerto 3000
-├── PostgreSQL             ← base de datos local en el VPS
-└── Almacenamiento local   ← imágenes en disco (o montaje S3-compatible)
+VPS Linux (Ubuntu 22.04, CloudPanel)
+├── Nginx (gestionado por CloudPanel) ← reverse proxy + SSL (Let's Encrypt)
+│   └── proxy_pass → 127.0.0.1:3000 (con soporte Upgrade/websockets)
+├── systemd (worklist.service)        ← mantiene vivo `npm start` (tsx server.ts), Restart=always
+│   └── Next.js custom server + API Routes + Socket.io, puerto 3000
+├── Node.js vía nvm del usuario del sitio (no el Node global del sistema)
+├── MySQL nativo del VPS               ← base de datos local, usuario/DB dedicados por sitio
+└── Almacenamiento local               ← imágenes en disco (o montaje S3-compatible)
 ```
+
+Cada sitio en CloudPanel es un **usuario Linux dedicado** (home, htdocs, logs y
+proceso separados) — no hay Docker en producción; el aislamiento entre proyectos
+del mismo VPS es a nivel de usuario/permisos, no de contenedor.
 
 **Herramientas de operación:**
-- **Docker + Docker Compose** — para levantar Postgres y la app de forma reproducible.
-- **PM2 o Docker** — para mantener el proceso Node.js corriendo (reinicio automático).
-- **Nginx** — reverse proxy, SSL terminado con Certbot (Let's Encrypt, gratuito).
-- **Backups de Postgres** — `pg_dump` programado con cron.
+- **systemd** — mantiene el proceso Node.js corriendo, con reinicio automático (`Restart=always`) y arranque en boot.
+- **Nginx** — reverse proxy, SSL terminado con Let's Encrypt vía `clpctl lets-encrypt:install:certificate`.
+- **Prisma `db push`** — sin migraciones versionadas todavía (no existe `prisma/migrations/`); cada deploy aplica el `schema.prisma` directo a la base.
+- **Backups de MySQL** — ⚠️ pendiente, no hay backup automatizado configurado todavía.
 
 **Ventajas de VPS propio:** sin costes de plataforma, control total de los datos,
 Socket.io sin restricciones serverless, almacenamiento de imágenes en disco propio.
@@ -262,4 +267,5 @@ Socket.io sin restricciones serverless, almacenamiento de imágenes en disco pro
 - **Edición colaborativa simultánea del texto**: la sync a nivel de entidad (v1) no
   resuelve dos personas editando la misma nota a la vez. Para eso se necesitaría Yjs/CRDT (v2).
 - **Almacenamiento de imágenes** — en VPS el disco es finito; definir límites por usuario y política de limpieza.
-- **Backups** — responsabilidad propia; programar `pg_dump` diario y backup del almacenamiento.
+- **Backups** — responsabilidad propia; no hay backup automatizado de MySQL configurado — pendiente programar `mysqldump` diario y backup del almacenamiento.
+- **Sin migraciones versionadas** — `prisma db push` puede aplicar cambios de schema incompatibles sin aviso de pérdida de datos en CI/CD; considerar pasar a `prisma migrate deploy` antes de tener usuarios reales.
