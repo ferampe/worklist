@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { requireWorkspaceMember } from "@/lib/access";
 import { unlink } from "fs/promises";
 import path from "path";
+import { UPLOAD_DIR } from "@/lib/upload-storage";
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -20,7 +21,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if ("error" in access) return access.error;
 
   try {
-    await unlink(path.join(process.cwd(), "public", attachment.storagePath));
+    await unlink(path.join(UPLOAD_DIR, path.basename(attachment.storagePath)));
   } catch {
     // File may already be gone — continue
   }

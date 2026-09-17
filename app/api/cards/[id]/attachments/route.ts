@@ -5,6 +5,7 @@ import { requireWorkspaceMember } from "@/lib/access";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { randomUUID } from "crypto";
+import { UPLOAD_DIR } from "@/lib/upload-storage";
 
 const MAX_SIZE = 20 * 1024 * 1024; // 20 MB
 
@@ -65,9 +66,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
   const filename = `${randomUUID()}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
-  const uploadDir = path.join(process.cwd(), "public", "uploads");
-  await mkdir(uploadDir, { recursive: true });
-  await writeFile(path.join(uploadDir, filename), buffer);
+  await mkdir(UPLOAD_DIR, { recursive: true });
+  await writeFile(path.join(UPLOAD_DIR, filename), buffer);
 
   const attachment = await prisma.attachment.create({
     data: {

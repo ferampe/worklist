@@ -42,7 +42,7 @@ next-env.d.ts
 
 /app/generated/
 .playwright-mcp/
-public/uploads/
+storage/uploads/
 
 # screenshots de desarrollo
 *.png

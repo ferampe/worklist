@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { randomUUID } from "crypto";
+import { UPLOAD_DIR } from "@/lib/upload-storage";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -22,9 +23,8 @@ export async function POST(req: NextRequest) {
   const filename = `${randomUUID()}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  const uploadDir = path.join(process.cwd(), "public", "uploads");
-  await mkdir(uploadDir, { recursive: true });
-  await writeFile(path.join(uploadDir, filename), buffer);
+  await mkdir(UPLOAD_DIR, { recursive: true });
+  await writeFile(path.join(UPLOAD_DIR, filename), buffer);
 
   return NextResponse.json({ url: `/uploads/${filename}` });
 }
